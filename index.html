@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<!-- 九巴實時到站頁面 · 基線版本 V0.2（之後改版請遞增 APP_VERSION） -->
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="app-version" content="0.2" />
+  <title>九巴實時到站（268C、9）</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <style>
+    :root {
+      --bg-top: #d9ecff;
+      --bg-bottom: #b8d9f5;
+      --card: rgba(255, 255, 255, 0.88);
+      --text: #1a3a52;
+      --muted: #4a6b82;
+      --accent: #2b7cb8;
+      --route-badge: #c41e3a;
+      --border: rgba(43, 124, 184, 0.2);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      min-height: 100vh;
+      font-family: "Noto Sans TC", system-ui, sans-serif;
+      color: var(--text);
+      background: linear-gradient(165deg, var(--bg-top) 0%, var(--bg-bottom) 45%, #a8cfe8 100%);
+      background-attachment: fixed;
+    }
+
+    .wrap {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: clamp(1.5rem, 5vw, 3rem) 1.25rem;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 1.25rem;
+    }
+
+    h1 {
+      font-size: clamp(1.35rem, 3.8vw, 1.85rem);
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      margin-bottom: 0.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .route-no {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 3rem;
+      padding: 0.2rem 0.55rem;
+      background: var(--route-badge);
+      color: #fff;
+      font-size: 0.95em;
+      border-radius: 6px;
+      font-weight: 600;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      font-size: 0.95rem;
+      font-weight: 400;
+    }
+
+    .route-pick {
+      display: flex;
+      justify-content: center;
+      gap: 0.4rem;
+      flex-wrap: wrap;
+      margin-top: 0.85rem;
+    }
+
+    .route-pick button {
+      font-family: inherit;
+      font-size: 0.9rem;
+      font-weight: 600;
+      padding: 0.4rem 0.95rem;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.65);
+      color: var(--muted);
+      cursor: pointer;
+    }
+
+    .route-pick button[aria-selected="true"] {
+      background: rgba(43, 124, 184, 0.2);
+      color: var(--accent);
+      border-color: rgba(43, 124, 184, 0.45);
+    }
+
+    .card {
+      background: var(--card);
+      border-radius: 16px;
+      padding: 1.5rem 1.25rem;
+      box-shadow: 0 8px 32px rgba(30, 80, 120, 0.12);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.6);
+    }
+
+    .card + .card {
+      margin-top: 1rem;
+    }
+
+    .eta-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+    }
+
+    .eta-meta {
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+
+    .btn {
+      font-family: inherit;
+      font-size: 0.875rem;
+      font-weight: 500;
+      padding: 0.45rem 0.9rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.9);
+      color: var(--accent);
+      cursor: pointer;
+    }
+
+    .btn:hover {
+      background: rgba(43, 124, 184, 0.08);
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 0.35rem;
+      margin-bottom: 1rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0.5rem;
+    }
+
+    .tab {
+      flex: 1;
+      text-align: center;
+      padding: 0.55rem 0.35rem;
+      font-size: 0.82rem;
+      font-weight: 500;
+      color: var(--muted);
+      background: transparent;
+      border: none;
+      border-radius: 8px 8px 0 0;
+      cursor: pointer;
+      font-family: inherit;
+      line-height: 1.35;
+    }
+
+    @media (min-width: 400px) {
+      .tab {
+        font-size: 0.88rem;
+        padding: 0.55rem 0.5rem;
+      }
+    }
+
+    .tab[aria-selected="true"] {
+      color: var(--accent);
+      background: rgba(43, 124, 184, 0.1);
+    }
+
+    .panel[hidden] {
+      display: none !important;
+    }
+
+    .eta-table-wrap {
+      overflow-x: auto;
+      margin: 0 -0.25rem;
+    }
+
+    table.eta {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+    }
+
+    table.eta th,
+    table.eta td {
+      padding: 0.5rem 0.4rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+
+    table.eta th {
+      color: var(--muted);
+      font-weight: 500;
+      white-space: nowrap;
+    }
+
+    table.eta .seq {
+      width: 2rem;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+
+    table.eta .stop-name {
+      font-weight: 500;
+      min-width: 6rem;
+    }
+
+    .eta-times {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem 0.6rem;
+    }
+
+    .eta-chip {
+      display: inline-flex;
+      flex-direction: column;
+      gap: 0.1rem;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .eta-chip time {
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .eta-chip .rmk {
+      font-size: 0.72rem;
+      color: var(--muted);
+      max-width: 5.5rem;
+      line-height: 1.2;
+    }
+
+    .status-msg {
+      text-align: center;
+      padding: 2rem 1rem;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .status-msg.error {
+      color: #b00020;
+    }
+
+    footer {
+      text-align: center;
+      margin-top: 1.5rem;
+      font-size: 0.75rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    footer a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    footer a:hover {
+      text-decoration: underline;
+    }
+
+    .footer-version {
+      margin-top: 0.35rem;
+      opacity: 0.9;
+    }
+
+    .geo-heading {
+      font-size: 1.05rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+
+    .geo-hint {
+      font-size: 0.8rem;
+      color: var(--muted);
+      line-height: 1.55;
+      margin-bottom: 0.85rem;
+    }
+
+    .geo-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.65rem 1rem;
+      margin-bottom: 0.65rem;
+    }
+
+    .geo-watch {
+      font-size: 0.82rem;
+      color: var(--muted);
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      cursor: pointer;
+    }
+
+    .geo-status {
+      font-size: 0.8rem;
+      color: var(--text);
+      line-height: 1.55;
+      margin-bottom: 0.75rem;
+      word-break: break-all;
+    }
+
+    .geo-status.muted {
+      color: var(--muted);
+    }
+
+    .map-wrap {
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      margin-top: 0.25rem;
+    }
+
+    .map {
+      height: min(52vw, 240px);
+      width: 100%;
+      background: #e8eef3;
+    }
+
+    table.eta .dist {
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+
+    table.eta .dist.near {
+      color: #0d6e3f;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1><span class="route-no" id="hdr-badge">268C</span> <span>九巴實時到站</span></h1>
+      <p class="subtitle" id="hdr-sub">朗屏站 ↔ 觀塘碼頭</p>
+      <div class="route-pick" role="tablist" aria-label="選擇路線">
+        <button type="button" id="pick-268c" aria-selected="true">268C</button>
+        <button type="button" id="pick-9" aria-selected="false">9</button>
+      </div>
+    </header>
+
+    <section class="card" id="geo-section" aria-labelledby="geo-heading">
+      <h2 class="geo-heading" id="geo-heading">我的實時定位</h2>
+      <p class="geo-hint">
+        運輸署公開資料<strong>不包含巴士車輛 GPS</strong>。此處使用你裝置的實時定位（經瀏覽器授權）及官方<strong>站牌座標</strong>，計算與各站直線距離，並在地圖上顯示目前方向沿途站點；僅作找站參考，不會把座標上傳到本頁以外的伺服器。
+      </p>
+      <div class="geo-actions">
+        <button type="button" class="btn" id="btn-geo">取得／更新定位</button>
+        <label class="geo-watch">
+          <input type="checkbox" id="geo-watch" />
+          持續更新（約每 15 秒）
+        </label>
+      </div>
+      <p class="geo-status muted" id="geo-status">尚未取得定位。點「取得／更新定位」並允許瀏覽器權限後，到站表會顯示「與你距離」欄。</p>
+      <div id="map-wrap" class="map-wrap" hidden>
+        <div id="map" class="map" role="application" aria-label="路線站點地圖"></div>
+      </div>
+    </section>
+
+    <section class="card" id="eta-section" aria-live="polite">
+      <div class="eta-toolbar">
+        <div class="eta-meta">
+          資料更新：<span id="eta-updated">—</span>
+        </div>
+        <button type="button" class="btn" id="btn-refresh">重新整理</button>
+      </div>
+      <div class="tabs" role="tablist">
+        <button type="button" class="tab" role="tab" id="tab-o" aria-selected="true" aria-controls="panel-o"></button>
+        <button type="button" class="tab" role="tab" id="tab-i" aria-selected="false" aria-controls="panel-i"></button>
+      </div>
+      <div id="panel-o" class="panel" role="tabpanel" aria-labelledby="tab-o">
+        <p class="status-msg">載入實時到站資料中…</p>
+      </div>
+      <div id="panel-i" class="panel" hidden role="tabpanel" aria-labelledby="tab-i">
+        <p class="status-msg">載入實時到站資料中…</p>
+      </div>
+    </section>
+
+    <footer>
+      <p>即時到站資料來源：<a href="https://data.gov.hk/tc-data/dataset/hk-td-tis_21-etakmb" target="_blank" rel="noopener noreferrer">data.gov.hk（九龍巴士及龍運巴士路線實時到站數據）</a></p>
+      <p>API：<code style="font-size: 0.85em">data.etabus.gov.hk</code></p>
+      <p class="footer-version" id="footer-version"></p>
+    </footer>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script>
+    (function () {
+      /** 頁面版本號：往後改版請改此處，並同步更新 <meta name="app-version"> 與檔案頂註解 */
+      const APP_VERSION = "0.2";
+
+      const API = "https://data.etabus.gov.hk/v1/transport/kmb";
+      const DIR_O = "O";
+      const DIR_I = "I";
+      const REFRESH_MS = 60 * 1000;
+
+      const ROUTES = [
+        {
+          id: "268C",
+          serviceType: "1",
+          badge: "268C",
+          sub: "朗屏站 ↔ 觀塘碼頭",
+          tabO: "往觀塘碼頭",
+          tabI: "往朗屏站",
+        },
+        {
+          id: "9",
+          serviceType: "1",
+          badge: "9",
+          sub: "彩福 ↔ 尖沙咀東(麼地道)",
+          tabO: "往尖沙咀東(麼地道)",
+          tabI: "往彩福",
+        },
+      ];
+
+      const byId = (id) => document.getElementById(id);
+      const hdrBadge = byId("hdr-badge");
+      const hdrSub = byId("hdr-sub");
+      const elUpdated = byId("eta-updated");
+      const btnRefresh = byId("btn-refresh");
+      const panelO = byId("panel-o");
+      const panelI = byId("panel-i");
+      const tabO = byId("tab-o");
+      const tabI = byId("tab-i");
+      const pick268c = byId("pick-268c");
+      const pick9 = byId("pick-9");
+      const footerVersion = byId("footer-version");
+      const btnGeo = byId("btn-geo");
+      const geoWatch = byId("geo-watch");
+
+      let current = ROUTES[0];
+      const stopCache = Object.create(null);
+      let timer = null;
+      let lastRefreshData = null;
+      let lastUserPos = null;
+      let mapInstance = null;
+      let markersLayer = null;
+      let geoWatchId = null;
+      let lastGeoHandledTs = 0;
+      const GEO_THROTTLE_MS = 15000;
+
+      function routeByPickId(pickId) {
+        return ROUTES.find((r) => r.id === pickId) || ROUTES[0];
+      }
+
+      async function fetchJson(url) {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const j = await res.json();
+        if (j.code && j.message) throw new Error(j.message);
+        return j;
+      }
+
+      async function loadStopNames(routeCfg) {
+        const key = routeCfg.id;
+        if (stopCache[key]) return stopCache[key];
+        const r = routeCfg.id;
+        const st = routeCfg.serviceType;
+        const [outRes, inRes] = await Promise.all([
+          fetchJson(`${API}/route-stop/${r}/outbound/${st}`),
+          fetchJson(`${API}/route-stop/${r}/inbound/${st}`),
+        ]);
+        const ids = new Set();
+        for (const row of outRes.data) ids.add(row.stop);
+        for (const row of inRes.data) ids.add(row.stop);
+
+        const nameMap = {};
+        await Promise.all(
+          [...ids].map(async (id) => {
+            const s = await fetchJson(`${API}/stop/${id}`);
+            const lat = parseFloat(s.data.lat);
+            const lng = parseFloat(s.data.long);
+            nameMap[id] = {
+              name: s.data.name_tc || s.data.name_en || id,
+              lat: lat,
+              lng: lng,
+            };
+          })
+        );
+
+        const mapO = {};
+        for (const row of outRes.data) {
+          const meta = nameMap[row.stop];
+          mapO[Number(row.seq)] = {
+            stopId: row.stop,
+            name: meta.name,
+            lat: meta.lat,
+            lng: meta.lng,
+          };
+        }
+        const mapI = {};
+        for (const row of inRes.data) {
+          const meta = nameMap[row.stop];
+          mapI[Number(row.seq)] = {
+            stopId: row.stop,
+            name: meta.name,
+            lat: meta.lat,
+            lng: meta.lng,
+          };
+        }
+
+        stopCache[key] = { O: mapO, I: mapI };
+        return stopCache[key];
+      }
+
+      function fmtClock(iso) {
+        if (!iso) return "—";
+        const d = new Date(iso);
+        if (Number.isNaN(d.getTime())) return "—";
+        return d.toLocaleTimeString("zh-HK", { hour: "2-digit", minute: "2-digit", hour12: false });
+      }
+
+      function groupEtas(rows, dir) {
+        const bySeq = {};
+        for (const row of rows) {
+          if (row.dir !== dir) continue;
+          const seq = row.seq;
+          if (!bySeq[seq]) bySeq[seq] = [];
+          bySeq[seq].push(row);
+        }
+        for (const seq of Object.keys(bySeq)) {
+          bySeq[seq].sort((a, b) => a.eta_seq - b.eta_seq);
+        }
+        return bySeq;
+      }
+
+      function haversineKm(lat1, lon1, lat2, lon2) {
+        const R = 6371;
+        const dLat = ((lat2 - lat1) * Math.PI) / 180;
+        const dLon = ((lon2 - lon1) * Math.PI) / 180;
+        const a =
+          Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+          Math.cos((lat1 * Math.PI) / 180) *
+            Math.cos((lat2 * Math.PI) / 180) *
+            Math.sin(dLon / 2) *
+            Math.sin(dLon / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
+      }
+
+      function fmtDist(km) {
+        if (km == null || !isFinite(km)) return "—";
+        if (km < 1) return Math.round(km * 1000) + " 米";
+        return km.toFixed(2) + " 公里";
+      }
+
+      function renderTable(stopMap, etaBySeq, userPos) {
+        const showDist = !!(userPos && isFinite(userPos.lat) && isFinite(userPos.lng));
+        const seqs = Object.keys(stopMap)
+          .map(Number)
+          .sort((a, b) => a - b);
+        const rowsHtml = seqs
+          .map((seq) => {
+            const stop = stopMap[seq];
+            const etas = etaBySeq[seq] || [];
+            const chips = etas
+              .slice(0, 3)
+              .map((e) => {
+                const rmk = (e.rmk_tc || "").trim();
+                return (
+                  '<span class="eta-chip"><time datetime="' +
+                  (e.eta || "") +
+                  '">' +
+                  fmtClock(e.eta) +
+                  "</time>" +
+                  (rmk ? '<span class="rmk">' + rmk + "</span>" : "") +
+                  "</span>"
+                );
+              })
+              .join("");
+            let distTd = "";
+            if (showDist) {
+              let dhtml = "—";
+              let cls = "dist";
+              if (stop && isFinite(stop.lat) && isFinite(stop.lng)) {
+                const km = haversineKm(userPos.lat, userPos.lng, stop.lat, stop.lng);
+                dhtml = fmtDist(km);
+                if (km < 0.5) cls += " near";
+              }
+              distTd = '<td class="' + cls + '">' + dhtml + "</td>";
+            }
+            return (
+              "<tr>" +
+              '<td class="seq">' +
+              seq +
+              "</td>" +
+              '<td class="stop-name">' +
+              (stop ? stop.name : "—") +
+              "</td>" +
+              distTd +
+              '<td><div class="eta-times">' +
+              (chips || '<span class="eta-chip"><time>—</time></span>') +
+              "</div></td>" +
+              "</tr>"
+            );
+          })
+          .join("");
+
+        const distHead = showDist ? "<th>與你距離（直線）</th>" : "";
+
+        return (
+          '<div class="eta-table-wrap"><table class="eta">' +
+          "<thead><tr>" +
+          "<th class=\"seq\">#</th>" +
+          "<th>站名</th>" +
+          distHead +
+          "<th>預計到站（最多三班）</th>" +
+          "</tr></thead>" +
+          "<tbody>" +
+          rowsHtml +
+          "</tbody></table></div>"
+        );
+      }
+
+      function ensureMap() {
+        if (typeof L === "undefined" || mapInstance) return;
+        const el = byId("map");
+        mapInstance = L.map(el, { scrollWheelZoom: false });
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+          maxZoom: 19,
+        }).addTo(mapInstance);
+        markersLayer = L.layerGroup().addTo(mapInstance);
+      }
+
+      function updateMap(names) {
+        const wrap = byId("map-wrap");
+        if (typeof L === "undefined" || !names || !wrap) {
+          if (wrap) wrap.hidden = true;
+          return;
+        }
+        const dir = tabO.getAttribute("aria-selected") === "true" ? DIR_O : DIR_I;
+        const smap = dir === DIR_O ? names.O : names.I;
+        const seqs = Object.keys(smap)
+          .map(Number)
+          .sort((a, b) => a - b);
+        const boundsPts = [];
+        seqs.forEach((seq) => {
+          const st = smap[seq];
+          if (st && isFinite(st.lat) && isFinite(st.lng)) boundsPts.push([st.lat, st.lng]);
+        });
+        if (boundsPts.length === 0) {
+          wrap.hidden = true;
+          return;
+        }
+        wrap.hidden = false;
+        ensureMap();
+        if (!mapInstance || !markersLayer) return;
+        markersLayer.clearLayers();
+        seqs.forEach((seq) => {
+          const st = smap[seq];
+          if (!st || !isFinite(st.lat) || !isFinite(st.lng)) return;
+          L.circleMarker([st.lat, st.lng], {
+            radius: 6,
+            color: "#1a6fa8",
+            weight: 2,
+            fillColor: "#5eb0e8",
+            fillOpacity: 0.9,
+          })
+            .bindTooltip(seq + ". " + st.name, { direction: "top" })
+            .addTo(markersLayer);
+        });
+        if (lastUserPos && isFinite(lastUserPos.lat) && isFinite(lastUserPos.lng)) {
+          L.marker([lastUserPos.lat, lastUserPos.lng])
+            .bindPopup("你的位置（約誤差 " + (lastUserPos.accuracy != null ? Math.round(lastUserPos.accuracy) : "—") + " 米）")
+            .addTo(markersLayer);
+          boundsPts.push([lastUserPos.lat, lastUserPos.lng]);
+        }
+        const b = L.latLngBounds(boundsPts);
+        requestAnimationFrame(() => {
+          if (!mapInstance) return;
+          mapInstance.invalidateSize();
+          mapInstance.fitBounds(b, { padding: [30, 30], maxZoom: 14 });
+        });
+      }
+
+      function setGeoStatus(text, muted) {
+        const el = byId("geo-status");
+        el.textContent = text;
+        el.classList.toggle("muted", !!muted);
+      }
+
+      function rerenderPanelsFromCache() {
+        if (!lastRefreshData) return;
+        const { names, rows } = lastRefreshData;
+        const etaO = groupEtas(rows, DIR_O);
+        const etaI = groupEtas(rows, DIR_I);
+        panelO.innerHTML = renderTable(names.O, etaO, lastUserPos);
+        panelI.innerHTML = renderTable(names.I, etaI, lastUserPos);
+        updateMap(names);
+      }
+
+      function handleGeoError(err) {
+        const code = err && err.code;
+        let msg = "無法取得定位。";
+        if (code === 1) msg = "已拒絕定位權限，請在瀏覽器設定中允許此網站。";
+        else if (code === 2) msg = "位置資訊暫時無法使用。";
+        else if (code === 3) msg = "定位逾時，請重試。";
+        setGeoStatus(msg, true);
+      }
+
+      function handlePosition(pos) {
+        const now = Date.now();
+        if (geoWatchId != null && now - lastGeoHandledTs < GEO_THROTTLE_MS) return;
+        lastGeoHandledTs = now;
+        lastUserPos = {
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          accuracy: pos.coords.accuracy,
+          ts: now,
+        };
+        const acc = pos.coords.accuracy != null ? Math.round(pos.coords.accuracy) : "—";
+        setGeoStatus(
+          "已定位：緯度 " +
+            lastUserPos.lat.toFixed(5) +
+            "，經度 " +
+            lastUserPos.lng.toFixed(5) +
+            "（誤差約 " +
+            acc +
+            " 米）· 更新 " +
+            new Date(now).toLocaleTimeString("zh-HK", { hour12: false }),
+          false
+        );
+        rerenderPanelsFromCache();
+      }
+
+      function applyRouteUi(routeCfg) {
+        document.title = "九巴 " + routeCfg.badge + "｜實時到站 · v" + APP_VERSION;
+        hdrBadge.textContent = routeCfg.badge;
+        hdrSub.textContent = routeCfg.sub;
+        tabO.textContent = routeCfg.tabO;
+        tabI.textContent = routeCfg.tabI;
+      }
+
+      function setLoadingPanels() {
+        const msg = '<p class="status-msg">載入實時到站資料中…</p>';
+        panelO.innerHTML = msg;
+        panelI.innerHTML = msg;
+        lastRefreshData = null;
+        updateMap(null);
+      }
+
+      async function refresh() {
+        const routeCfg = current;
+        btnRefresh.disabled = true;
+        try {
+          const [names, etaRes] = await Promise.all([
+            loadStopNames(routeCfg),
+            fetchJson(`${API}/route-eta/${routeCfg.id}/${routeCfg.serviceType}`),
+          ]);
+          const rows = etaRes.data || [];
+          const ts = etaRes.generated_timestamp || "";
+          elUpdated.textContent = ts
+            ? new Date(ts).toLocaleString("zh-HK", { hour12: false })
+            : "—";
+
+          const etaO = groupEtas(rows, DIR_O);
+          const etaI = groupEtas(rows, DIR_I);
+          lastRefreshData = { names: names, rows: rows };
+          panelO.innerHTML = renderTable(names.O, etaO, lastUserPos);
+          panelI.innerHTML = renderTable(names.I, etaI, lastUserPos);
+          updateMap(names);
+        } catch (e) {
+          const msg = e && e.message ? e.message : String(e);
+          const err = '<p class="status-msg error">無法載入實時資料：' + msg + "</p>";
+          lastRefreshData = null;
+          panelO.innerHTML = err;
+          panelI.innerHTML = err;
+          elUpdated.textContent = "—";
+          updateMap(null);
+        } finally {
+          btnRefresh.disabled = false;
+        }
+      }
+
+      function tabActivate(which) {
+        const showO = which === "o";
+        tabO.setAttribute("aria-selected", showO);
+        tabI.setAttribute("aria-selected", !showO);
+        panelO.hidden = !showO;
+        panelI.hidden = showO;
+        if (lastRefreshData) updateMap(lastRefreshData.names);
+      }
+
+      function selectRoute(routeCfg) {
+        current = routeCfg;
+        pick268c.setAttribute("aria-selected", routeCfg.id === "268C");
+        pick9.setAttribute("aria-selected", routeCfg.id === "9");
+        applyRouteUi(routeCfg);
+        setLoadingPanels();
+        tabActivate("o");
+        refresh();
+      }
+
+      tabO.addEventListener("click", () => tabActivate("o"));
+      tabI.addEventListener("click", () => tabActivate("i"));
+      btnRefresh.addEventListener("click", () => refresh());
+      pick268c.addEventListener("click", () => selectRoute(routeByPickId("268C")));
+      pick9.addEventListener("click", () => selectRoute(routeByPickId("9")));
+
+      btnGeo.addEventListener("click", () => {
+        if (!navigator.geolocation) {
+          setGeoStatus("此瀏覽器不支援定位。", true);
+          return;
+        }
+        setGeoStatus("定位中…", true);
+        navigator.geolocation.getCurrentPosition(handlePosition, handleGeoError, {
+          enableHighAccuracy: true,
+          timeout: 22000,
+          maximumAge: 0,
+        });
+      });
+
+      geoWatch.addEventListener("change", () => {
+        if (geoWatch.checked) {
+          if (!navigator.geolocation) {
+            geoWatch.checked = false;
+            setGeoStatus("此瀏覽器不支援定位。", true);
+            return;
+          }
+          geoWatchId = navigator.geolocation.watchPosition(handlePosition, handleGeoError, {
+            enableHighAccuracy: true,
+            timeout: 22000,
+            maximumAge: 8000,
+          });
+        } else if (geoWatchId != null) {
+          navigator.geolocation.clearWatch(geoWatchId);
+          geoWatchId = null;
+        }
+      });
+
+      footerVersion.textContent = "頁面版本 V" + APP_VERSION;
+
+      applyRouteUi(current);
+      refresh();
+      timer = setInterval(refresh, REFRESH_MS);
+    })();
+  </script>
+</body>
+</html>
